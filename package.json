@@ -1,0 +1,24 @@
+{
+  "name": "gveg-gestao",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de gestão da fábrica de bolsas GVEG",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "build:supabase-test": "esbuild ./src/supabase-client.js --bundle --format=iife --target=esnext --minify --outfile=./public/assets/supabase-test.bundle.js",
+    "prestart": "npm run build:supabase-test",
+    "predev": "npm run build:supabase-test",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#292722"><title>GVEG Gestão</title>
+  <link rel="stylesheet" href="/assets/app.css"><script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <div id="auth" class="auth-screen" hidden>
+    <div class="auth-brand"><span class="brand-mark">V</span><span>VIP COUROS <small>GESTÃO</small></span></div>
+    <section class="auth-card">
+      <div class="eyebrow" id="auth-eyebrow">ACESSO AO SISTEMA</div>
+      <h1 id="auth-title">Entre na sua conta</h1>
+      <p class="muted" id="auth-copy">Acesse o ambiente de gestão da fábrica.</p>
+      <form id="auth-form" class="form-stack" autocomplete="on">
+        <label id="name-field" hidden>Seu nome<input name="name" autocomplete="name" minlength="2" maxlength="100" placeholder="Nome e sobrenome"></label>
+        <label>E-mail<input name="email" type="email" autocomplete="username" required maxlength="254" placeholder="voce@empresa.com"></label>
+        <label>Senha<input name="password" type="password" autocomplete="current-password" required minlength="12" placeholder="Pelo menos 12 caracteres"></label>
+        <button class="button button-primary" id="auth-submit">Entrar</button>
+        <p id="auth-error" class="error-message" role="alert" hidden></p>
+      </form>
+      <p class="setup-note" id="setup-note" hidden>Primeiro acesso: crie a conta do proprietário. A senha deve ter pelo menos 12 caracteres.</p>
+    </section>
+    <p class="auth-foot">Acesso privado · VIP Couros</p>
+  </div>
+
+  <div id="app" class="app-layout" hidden>
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#inicio" aria-label="VIP Couros, início"><span class="brand-mark">V</span><span class="brand-name">VIP COUROS<small>GESTÃO DA FÁBRICA</small></span></a>
+      <div class="side-label">ESPAÇO DE TRABALHO</div>
+      <nav id="navigation" aria-label="Navegação principal"></nav>
+      <div class="sidebar-bottom"><div class="secure-tag"><span></span> Ambiente protegido</div><button id="logout" class="logout-button">Sair da conta <span>↗</span></button></div>
+    </aside>
+    <main class="main-area">
+      <header class="topbar"><button id="menu-toggle" class="icon-button menu-toggle" aria-label="Abrir menu">☰</button><div class="breadcrumb" id="breadcrumb">Visão geral <span>/</span> Painel</div><div class="topbar-right"><span class="topbar-date" id="today-label"></span><div class="avatar" id="user-avatar">V</div><div class="user-block"><strong id="user-name">Usuário</strong><small id="user-role">Proprietário</small></div></div></header>
+      <section id="view" class="content" tabindex="-1"></section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="record-dialog" class="record-dialog"></dialog>
+</body>
+</html>
