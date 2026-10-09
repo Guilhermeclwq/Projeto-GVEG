@@ -1,0 +1,3 @@
+[submodule "Recibo_pdf"]
+	path = Recibo_pdf
+	url = https://github.com/Guilhermeclwq/Recibo_pdf.git
