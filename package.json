@@ -7,18 +7,16 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "build:supabase-test": "esbuild ./src/supabase-client.js --bundle --format=iife --target=esnext --minify --outfile=./public/assets/supabase-test.bundle.js",
-    "prestart": "npm run build:supabase-test",
-    "predev": "npm run build:supabase-test",
-    "test": "node --test"
+    "test": "node --test",
+    "migrate:turso": "node --env-file=.env scripts/migrate-to-turso.js",
+    "test:turso-connection": "node --env-file=.env scripts/check-turso-connection.js",
+    "diagnose:turso-network": "node --env-file=.env scripts/diagnose-turso-network.js"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.117.3"
+    "@libsql/client": "^0.18.0"
   },
-  "devDependencies": {
-    "esbuild": "^0.28.2"
-  }
+  "devDependencies": {}
 }

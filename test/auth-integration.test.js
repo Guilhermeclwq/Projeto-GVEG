@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { Script } from 'node:vm';
+import { createClient } from '@libsql/client';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -23,10 +24,25 @@ test('primeiro acesso, login, proteção de sessão e recibo original', { timeou
   const frontend=await readFile(path.join(root,'public','assets','app.js'),'utf8');
   assert.doesNotThrow(()=>new Script(frontend,{filename:'app.js'}),'frontend must parse as a classic browser script');
   const dir=await mkdtemp(path.join(tmpdir(),'gveg-auth-'));
-  const port=await freePort();
-  const child=spawn(process.execPath,['server.js'],{cwd:root,env:{...process.env,HOST:'127.0.0.1',PORT:String(port),DB_PATH:path.join(dir,'test.sqlite')},stdio:'ignore'});
-  const base=`http://127.0.0.1:${port}`;
-  t.after(async()=>{child.kill(); await new Promise(resolve=>child.once('exit',resolve)); await rm(dir,{recursive:true,force:true});});
+  const dbPath=path.join(dir,'test.sqlite');
+  const databaseUrl=pathToFileURL(dbPath).href;
+  const testEnv={...process.env,NODE_ENV:'test',TURSO_DATABASE_URL:databaseUrl,TURSO_AUTH_TOKEN:'',HOST:'127.0.0.1'};
+  const migration=spawnSync(process.execPath,['scripts/migrate-to-turso.js'],{cwd:root,env:testEnv,encoding:'utf8'});
+  assert.equal(migration.status,0,`temporary test schema migration succeeds: ${migration.stderr}`);
+  const repeatMigration=spawnSync(process.execPath,['scripts/migrate-to-turso.js'],{cwd:root,env:testEnv,encoding:'utf8'});
+  assert.equal(repeatMigration.status,0,`reapplying the same migrations is idempotent: ${repeatMigration.stderr}`);
+  let port=await freePort();
+  let base=`http://127.0.0.1:${port}`;
+  const startServer=()=>spawn(process.execPath,['server.js'],{cwd:root,env:{...testEnv,PORT:String(port)},stdio:'ignore'});
+  let child=startServer();
+  const stopServer=async()=>{
+    if(child&&child.exitCode===null&&child.signalCode===null){
+      const exited=new Promise(resolve=>child.once('exit',resolve));
+      child.kill('SIGINT');
+      await exited;
+    }
+  };
+  t.after(async()=>{await stopServer(); await new Promise(resolve=>setTimeout(resolve,150)); await rm(dir,{recursive:true,force:true,maxRetries:10,retryDelay:100});});
   let ready=false;
   for(let i=0;i<80;i++) { try { await fetch(`${base}/api/setup-status`); ready=true; break; } catch { await new Promise(resolve=>setTimeout(resolve,100)); } }
   assert.equal(ready,true,'server starts');
@@ -41,13 +57,13 @@ test('primeiro acesso, login, proteção de sessão e recibo original', { timeou
   assert.match(loginScript.headers.get('content-type'),/javascript/);
   assert.match(await loginScript.text(),/api\/setup-status/);
   assert.equal((await fetch(`${base}/assets/app.css`)).status,200,'the unauthenticated setup screen can load its styles');
-  assert.equal((await fetch(`${base}/assets/supabase-test.bundle.js`)).status,401,'other application assets remain protected');
   const crossOrigin=await fetch(`${base}/api/setup`,{method:'POST',headers:{'content-type':'application/json',origin:'https://outside.example'},body:'{}'});
   assert.equal(crossOrigin.status,403);
   assert.equal((await fetch(`${base}/api/products`)).status,401);
-  assert.equal((await fetch(`${base}/api/supabase-config`)).status,401,'Supabase client config requires the management session');
-  assert.equal((await fetch(`${base}/supabase-test`)).status,404,'the Supabase test tool is not public');
-  const setup=await fetch(`${base}/api/setup`,{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({name:'Dona Teste',email:`owner-${randomUUID()}@example.test`,password:'senha-segura-123'})});
+  assert.equal((await fetch(`${base}/supabase-test`)).status,404,'the removed Supabase tool has no route');
+  const ownerEmail=`owner-${randomUUID()}@example.test`;
+  const ownerPassword='senha-segura-123';
+  const setup=await fetch(`${base}/api/setup`,{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({name:'Dona Teste',email:ownerEmail,password:ownerPassword})});
   assert.equal(setup.status,201);
   const setCookie=setup.headers.get('set-cookie');
   assert.match(setCookie,/HttpOnly/);
@@ -55,16 +71,6 @@ test('primeiro acesso, login, proteção de sessão e recibo original', { timeou
   assert.equal((await fetch(`${base}/api/setup`,{method:'POST',headers:{'content-type':'application/json',origin:base},body:'{}'})).status,409);
   assert.equal((await fetch(`${base}/api/me`)).status,401);
   assert.equal((await fetch(`${base}/api/me`,{headers:{cookie}})).status,200);
-  const supabaseConfigResponse=await fetch(`${base}/api/supabase-config`,{headers:{cookie}});
-  assert.equal(supabaseConfigResponse.status,200);
-  const supabaseConfig=await supabaseConfigResponse.json();
-  assert.equal(typeof supabaseConfig.configured,'boolean');
-  if(supabaseConfig.configured){assert.match(supabaseConfig.url,/^https:\/\//);assert.match(supabaseConfig.publishableKey,/^sb_publishable_/);}
-  const supabasePage=await fetch(`${base}/supabase-test`,{headers:{cookie}});
-  assert.equal(supabasePage.status,200);
-  assert.match(supabasePage.headers.get('content-security-policy'),/connect-src 'self'/);
-  assert.match(await supabasePage.text(),/Inserir e consultar/);
-  assert.equal((await fetch(`${base}/assets/supabase-test.bundle.js`,{headers:{cookie}})).status,200);
   assert.equal((await fetch(`${base}/recibos/ferramenta`,{headers:{cookie}})).status,200);
 
   const post=async(path,body)=>fetch(`${base}${path}`,{method:'POST',headers:{cookie,'content-type':'application/json',origin:base},body:JSON.stringify(body)});
@@ -169,4 +175,23 @@ test('primeiro acesso, login, proteção de sessão e recibo original', { timeou
   const logout=await fetch(`${base}/api/logout`,{method:'POST',headers:{cookie,'content-type':'application/json',origin:base},body:'{}'});
   assert.equal(logout.status,200);
   assert.equal((await fetch(`${base}/api/me`,{headers:{cookie}})).status,401);
+
+  await stopServer();
+  port=await freePort();
+  base=`http://127.0.0.1:${port}`;
+  child=startServer();
+  let restarted=false;
+  for(let i=0;i<80;i++) { try { await fetch(`${base}/api/setup-status`); restarted=true; break; } catch { await new Promise(resolve=>setTimeout(resolve,100)); } }
+  assert.equal(restarted,true,'server restarts against the same SQLite file');
+  assert.deepEqual(await fetch(`${base}/api/setup-status`).then(r=>r.json()),{needsSetup:false});
+  const persistedLogin=await fetch(`${base}/api/login`,{method:'POST',headers:{'content-type':'application/json',origin:base},body:JSON.stringify({email:ownerEmail,password:ownerPassword})});
+  assert.equal(persistedLogin.status,200,'owner credentials persist after process restart');
+  const persistedCookie=persistedLogin.headers.get('set-cookie').split(';')[0];
+  assert.equal((await fetch(`${base}/api/products`,{headers:{cookie:persistedCookie}}).then(r=>r.json())).items.length,1,'business records persist after process restart');
+  await stopServer();
+  const checkDb=createClient({url:databaseUrl,intMode:'number'});
+  try {
+    assert.equal((await checkDb.execute('PRAGMA integrity_check')).rows[0].integrity_check,'ok');
+    assert.equal((await checkDb.execute('PRAGMA foreign_key_check')).rows.length,0,'temporary test database has no foreign-key violations');
+  } finally { checkDb.close(); }
 });

@@ -1,44 +1,26 @@
-# Operação, backup e implantação
+# Implantação GVEG com Turso
 
-## Estado atual
+## Estado
 
-Esta versão é executável em uma máquina Windows ou Linux com Node.js 22.5 ou superior. Usa SQLite no servidor único e o módulo nativo `node:sqlite`. Ele ainda é marcado experimental pelo Node.js 24 usado no desenvolvimento. Não existe adaptador PostgreSQL nesta versão. A implantação multi-instância e a exposição à internet não estão prontas.
+A aplicação usa `@libsql/client` e exige `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`. Não há fallback para `data/gveg.sqlite`, PostgreSQL ou Supabase. O startup faz uma consulta de conectividade e verifica `gveg_schema_migrations`; ele não executa DDL. A Render e seus valores de ambiente não foram modificados e não houve deploy.
 
-### Preparação para Render
+## Preparar um banco descartável
 
-O projeto pode iniciar como um Web Service Node no Render com `npm install` e `npm start` (Node.js 22.5 ou superior). O servidor usa `process.env.PORT`, com fallback local em `3000`, e escuta em `0.0.0.0`. O script `prestart` gera o bundle do cliente Supabase antes de iniciar. Não é necessário configurar `HOST` ou `PORT` no Render.
+1. Crie manualmente um banco Turso separado para desenvolvimento (`turso db create gveg-dev`); obtenha URL (`turso db show --url gveg-dev`) e token (`turso db tokens create gveg-dev`). Consulte a [quickstart oficial TypeScript](https://docs.turso.tech/sdk/ts/quickstart).
+2. Guarde-os somente no `.env` local (ignorado pelo Git), ou no ambiente do host apropriado. `npm run test:turso-connection` executa somente `SELECT 1`, sem DDL. Não os cole no terminal se o histórico do shell for compartilhado.
+3. Revise `turso/migrations/*.sql` e rode `npm run migrate:turso` apenas apontando para o banco descartável vazio. O comando grava um ledger com checksums; se o destino tiver tabelas sem ledger ou uma versão inesperada, ele para.
+4. Rode `npm test` para validar fluxo funcional com banco libSQL temporário local. Para comprovar rede, TLS e credenciais, execute `npm start` com as variáveis do banco de desenvolvimento e confira a disponibilidade HTTP sem imprimir a configuração.
 
-Defina `NODE_ENV=production`, `SESSION_DAYS` (opcional), `SUPABASE_URL` e `SUPABASE_PUBLISHABLE_KEY` nas variáveis de ambiente do serviço. A chave publishable é enviada ao navegador para o cliente Supabase; nunca configure uma chave `sb_secret_` ou `service_role`. O `.env.example` lista as variáveis e valores de exemplo não secretos.
+## Render
 
-**Limite para uso real:** os módulos operacionais ainda gravam em SQLite. O disco de um Web Service gratuito do Render é efêmero, então o arquivo SQLite pode ser perdido ao reiniciar ou implantar; não use esse serviço com dados operacionais até migrar essa persistência para PostgreSQL ou adotar armazenamento persistente compatível. O cliente Supabase atualmente só atende a ferramenta de teste isolada. Esta preparação permite validar a inicialização e servir a interface; não torna o armazenamento comercial persistente no Render gratuito.
+Após a validação e aprovação manual do proprietário, configure `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` e `NODE_ENV=production` em Render → Environment e faça deploy manual. O servidor usa `PORT` e `0.0.0.0`; nenhum disco persistente é necessário. Não remova variáveis antigas do serviço até verificar que a versão anterior não depende mais delas.
 
-O cliente oficial `@supabase/supabase-js` está configurado para a etapa de validação em uma tabela dedicada. Antes de abrir **Teste Supabase**, aplique `supabase/migrations/202610090001_supabase_connection_test.sql` no SQL Editor do projeto e defina `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` no `.env`. Esta configuração não migra nem sincroniza os módulos de negócio: eles continuam no SQLite até que o teste de gravação, leitura após recarga e isolamento RLS seja concluído.
+## Dados existentes e recuperação
 
-Para mais de um computador da fábrica, os navegadores podem acessar a mesma instância na rede local. Restrinja o acesso pela rede e use HTTPS em um proxy reverso; configure `HOST` e `PORT` no `.env`. Com `NODE_ENV=production`, o navegador só envia o cookie de sessão por HTTPS.
+`data/gveg.sqlite` permanece no projeto e não foi importado. A auditoria anterior encontrou registros; não trate o novo banco como cópia desses dados. Este projeto ainda não tem um importador seguro SQLite→Turso, por isso nenhum procedimento de carga deve ser iniciado com dados reais até existir script explícito com validação de contagens, chaves estrangeiras, checksum e repetibilidade.
 
-## Backup manual
+Antes de qualquer mudança futura, faça backup consistente do SQLite (incluindo WAL através de ferramenta SQLite de backup) e backup/exportação do destino Turso. Preserve cópias independentes e ensaie a restauração num banco descartável. As migrations PostgreSQL antigas em `supabase/migrations/` foram preservadas e não são compatíveis para aplicação automática no Turso.
 
-1. Avise os usuários e encerre o processo Node normalmente para fechar o banco e confirmar o WAL.
-2. Copie `data/gveg.sqlite` para uma pasta de backup com acesso restrito e criptografia em repouso.
-3. Registre a data da cópia e guarde uma cópia em outra unidade protegida.
-4. Reinicie o servidor e confirme o login e uma consulta de leitura.
+## Testes executados localmente
 
-Não faça a cópia enquanto o processo estiver gravando no SQLite. Esta aplicação ainda não agenda backups nem copia anexos de documentos.
-
-## Restauração
-
-1. Pare o processo Node normalmente.
-2. Copie o banco atual para uma pasta de quarentena; não o sobrescreva sem guardar essa cópia.
-3. Copie o arquivo de backup para `data/gveg.sqlite`.
-4. Inicie o servidor e confirme o login, a contagem de registros e uma leitura de cada módulo operacional.
-5. Preserve o banco em quarentena até confirmar que o estado restaurado está correto.
-
-## Antes de uma implantação de produção
-
-- Migrar a persistência para PostgreSQL e executar testes de migração e concorrência.
-- Configurar HTTPS, firewall, proxy reverso, serviço gerenciado e logs com rotação.
-- Automatizar backups criptografados e executar um teste de restauração.
-- Definir política de retenção, acesso a dados pessoais e gestão segura de segredos.
-- Executar a suíte de testes e uma revisão de segurança em um ambiente de homologação com dados fictícios.
-
-Não exponha a porta HTTP do servidor diretamente à internet.
+`npm test` usa uma base temporária isolada, aplica o conjunto de migrations Turso e testa setup/login/sessão, permissões, operações de negócio cobertas pela integração, transações, integridade relacional e persistência após reinício. Isso não testa autenticação/rede de um Turso remoto. Essa validação depende de uma instância Turso de desenvolvimento e credenciais locais.

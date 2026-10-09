@@ -2,7 +2,7 @@ const navGroups = [
   { title: 'VISÃO GERAL', items: [{id:'inicio',label:'Painel',icon:'◫'}] },
   { title: 'OPERAÇÃO', items: [{id:'produtos',label:'Modelos e produtos',icon:'◇'},{id:'materiais',label:'Materiais e estoque',icon:'▤'},{id:'producao',label:'Produção',icon:'⚒'},{id:'compras',label:'Compras',icon:'⇩'},{id:'fornecedores',label:'Fornecedores',icon:'♙'},{id:'vendas',label:'Vendas',icon:'⇧'},{id:'clientes',label:'Clientes',icon:'♧'}] },
   { title: 'GESTÃO', items: [{id:'financeiro',label:'Financeiro',icon:'R$'},{id:'relatorios',label:'Relatórios',icon:'▥'}] },
-  { title: 'FERRAMENTAS', items: [{id:'recibos',label:'Recibos',icon:'▧'},{id:'supabase',label:'Teste Supabase',icon:'✓',href:'/supabase-test',external:true}] },
+  { title: 'FERRAMENTAS', items: [{id:'recibos',label:'Recibos',icon:'▧'}] },
   { title: 'ADMINISTRAÇÃO', items: [{id:'usuarios',label:'Usuários e acessos',icon:'♙'},{id:'auditoria',label:'Registro de auditoria',icon:'◷'},{id:'configuracoes',label:'Custos e configurações',icon:'⚙'}] }
 ];
 const moduleNames = Object.fromEntries(navGroups.flatMap(group=>group.items.map(item=>[item.id,item.label])));
@@ -288,7 +288,26 @@ document.addEventListener('click',event=>{
 });
 window.addEventListener('popstate',()=>showView(location.hash.slice(1)||'inicio'));
 document.querySelector('#menu-toggle').addEventListener('click',()=>document.querySelector('#sidebar').classList.toggle('open'));
-document.querySelector('#logout').addEventListener('click',async()=>{ try { await request('/api/logout',{method:'POST',body:'{}'}); currentUser=null; history.replaceState({},'','/'); showAuth(false); notify('Sessão encerrada.'); } catch(e) { notify(e.message); } });
+async function leaveAccount() {
+  const buttons=[document.querySelector('#logout'),document.querySelector('#switch-account')];
+  buttons.forEach(button=>button.disabled=true);
+  try {
+    await request('/api/logout',{method:'POST',body:'{}'});
+    currentUser=null;
+    form.reset();
+    const error=document.querySelector('#auth-error');error.textContent='';error.hidden=true;
+    history.replaceState({},'','/');
+    showAuth(false);
+    form.elements.email.focus();
+    notify('Sessão encerrada. Entre novamente com esta ou outra conta.');
+  } catch(e) {
+    notify(e.message);
+  } finally {
+    buttons.forEach(button=>button.disabled=false);
+  }
+}
+document.querySelector('#logout').addEventListener('click',leaveAccount);
+document.querySelector('#switch-account').addEventListener('click',leaveAccount);
 
 async function initializeApp(){
   try {
