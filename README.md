@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # GVEG Gestão
 
 Aplicação web para a gestão da fábrica VIP Couros. O sistema está sendo construído em etapas e não contém dados empresariais de demonstração.
@@ -59,3 +60,6 @@ O arquivo original `Recibo_pdf/recibo_auto.html` é servido pela rota autenticad
 - **Estrutura de banco:** os arquivos numerados de `migrations/` são aplicados na inicialização e usam instruções idempotentes para as tabelas e parâmetros iniciais.
 
 O servidor deve permanecer em rede privada até que a implantação com HTTPS, PostgreSQL, backups automáticos, controle de sessões e revisão de segurança seja preparada. Os valores de custo são estimativas gerenciais, não valores contábeis definitivos.
+=======
+# Projeto-GVEG
+>>>>>>> origin/main
